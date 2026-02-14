@@ -1,0 +1,8 @@
+relp-forwarder
+relp-forwarder-*
+coverage.out
+*.exe
+.idea/
+.vscode/
+*.swp
+*.swo
