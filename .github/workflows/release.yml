@@ -27,13 +27,15 @@ jobs:
           BUILD_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
           LDFLAGS="-s -w -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME}"
 
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="${LDFLAGS}" -o relp-forwarder-linux-amd64 .
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="${LDFLAGS}" -o relp-forwarder-linux-arm64 .
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="${LDFLAGS}" -o relp-forwarder-darwin-amd64 .
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="${LDFLAGS}" -o relp-forwarder-darwin-arm64 .
+          for bin in relp-forwarder relp-listener; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="${LDFLAGS}" -o ${bin}-linux-amd64 ./cmd/${bin}/
+            CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="${LDFLAGS}" -o ${bin}-linux-arm64 ./cmd/${bin}/
+            CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="${LDFLAGS}" -o ${bin}-darwin-amd64 ./cmd/${bin}/
+            CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="${LDFLAGS}" -o ${bin}-darwin-arm64 ./cmd/${bin}/
+          done
 
       - name: Create checksums
-        run: sha256sum relp-forwarder-* > checksums.txt
+        run: sha256sum relp-*-* > checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -44,6 +46,10 @@ jobs:
             relp-forwarder-linux-arm64
             relp-forwarder-darwin-amd64
             relp-forwarder-darwin-arm64
+            relp-listener-linux-amd64
+            relp-listener-linux-arm64
+            relp-listener-darwin-amd64
+            relp-listener-darwin-arm64
             checksums.txt
 
       - name: Login to GHCR

@@ -1,17 +1,22 @@
 # syslog-ng-relp
 
-RELP forwarder for [syslog-ng OSE](https://github.com/syslog-ng/syslog-ng) — a single Go binary with zero external dependencies that reads log lines from stdin and delivers them reliably via the [RELP protocol](https://www.rsyslog.com/doc/v8-stable/configuration/modules/imrelp.html).
+RELP tools for [syslog-ng OSE](https://github.com/syslog-ng/syslog-ng) — pure Go binaries with zero external dependencies that add RELP support to any syslog-ng installation via the `program()` driver.
 
-Designed for syslog-ng's `program()` destination driver, enabling RELP output without compiling syslog-ng with librelp support.
+**Two binaries:**
+- **relp-forwarder** — reads from stdin, sends via RELP (for `program()` destination)
+- **relp-listener** — accepts RELP connections, writes to stdout (for `program()` source)
+
+No librelp, no CGO, no recompilation of syslog-ng required.
 
 ## Features
 
 - **Pure Go RELP v1 implementation** — no librelp, no CGO, no external dependencies
-- **Reliable delivery** — every message is acked by the RELP server before proceeding
-- **Automatic reconnection** — configurable retry delay on connection loss
-- **TLS support** — optional TLS with certificate verification skip
+- **Reliable delivery** — every message is acked before proceeding
+- **Automatic reconnection** — configurable retry delay on connection loss (forwarder)
+- **Concurrent connections** — listener handles multiple RELP clients simultaneously
+- **TLS support** — both binaries support TLS (listener with cert/key, forwarder with optional insecure skip)
 - **1 MB line buffer** — handles long syslog messages
-- **Single static binary** — runs from scratch Docker images
+- **Single static binaries** — run from scratch Docker images
 - **Cross-platform** — builds for linux/darwin on amd64/arm64
 
 ## Installation
@@ -19,7 +24,8 @@ Designed for syslog-ng's `program()` destination driver, enabling RELP output wi
 ### From source
 
 ```bash
-go install github.com/cybericius/syslog-ng-relp@latest
+go install github.com/cybericius/syslog-ng-relp/cmd/relp-forwarder@latest
+go install github.com/cybericius/syslog-ng-relp/cmd/relp-listener@latest
 ```
 
 ### From release binary
@@ -32,6 +38,12 @@ Download from [GitHub Releases](https://github.com/cybericius/syslog-ng-relp/rel
 docker pull ghcr.io/cybericius/syslog-ng-relp:latest
 ```
 
+Both binaries are included in the image. Override the entrypoint to use the listener:
+
+```bash
+docker run ghcr.io/cybericius/syslog-ng-relp:latest /relp-listener --port=2514
+```
+
 ### Build from source
 
 ```bash
@@ -40,9 +52,9 @@ cd syslog-ng-relp
 make build
 ```
 
-## Usage with syslog-ng
+## relp-forwarder (destination)
 
-Add a `program()` destination to your syslog-ng configuration:
+Reads log lines from stdin and delivers them to a remote RELP server. Use with syslog-ng's `program()` destination:
 
 ```
 destination d_relp {
@@ -67,21 +79,7 @@ destination d_relp_tls {
 };
 ```
 
-### Docker: custom syslog-ng image
-
-Add the forwarder to your syslog-ng Docker image:
-
-```dockerfile
-FROM golang:1.24-alpine AS builder
-WORKDIR /build
-COPY go.mod main.go ./
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o relp-forwarder .
-
-FROM balabit/syslog-ng:4.10.2
-COPY --from=builder /build/relp-forwarder /usr/local/bin/relp-forwarder
-```
-
-## Configuration
+### Forwarder flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -92,30 +90,94 @@ COPY --from=builder /build/relp-forwarder /usr/local/bin/relp-forwarder
 | `--reconnect-delay` | `2s` | Delay between reconnection attempts |
 | `--version` | | Print version and exit |
 
-## How it works
+### How the forwarder works
 
 ```
 ┌──────────┐  stdin   ┌─────────────────┐  RELP/TCP  ┌──────────────┐
 │ syslog-ng │────────►│ relp-forwarder  │───────────►│ RELP server  │
-│ program() │         │ (this binary)   │◄───────────│ (rsyslog,    │
+│ program() │         │                 │◄───────────│ (rsyslog,    │
 └──────────┘         └─────────────────┘   RELP ACK  │  etc.)       │
                                                       └──────────────┘
 ```
 
-1. syslog-ng writes one log line per `write()` to the program's stdin
-2. The forwarder opens a RELP session (handshake with `open` command)
-3. Each line is sent as a `syslog` command and the forwarder waits for an ack (`rsp 200 OK`)
-4. On connection failure, the forwarder reconnects and retries the failed message
-5. On stdin EOF (syslog-ng shutdown), the forwarder sends `close` and exits
+## relp-listener (source)
+
+Accepts incoming RELP connections and writes received syslog messages to stdout, one per line. Use with syslog-ng's `program()` source:
+
+```
+source s_relp {
+    program("/usr/local/bin/relp-listener --port=2514"
+        persist-name("s_relp")
+    );
+};
+
+log {
+    source(s_relp);
+    destination(d_local);
+};
+```
+
+### With TLS
+
+```
+source s_relp_tls {
+    program("/usr/local/bin/relp-listener --port=6514 --tls --tls-cert=/etc/ssl/server.crt --tls-key=/etc/ssl/server.key"
+        persist-name("s_relp_tls")
+    );
+};
+```
+
+### Listener flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--listen` | `0.0.0.0` | Listen address |
+| `--port` | `2514` | Listen port |
+| `--tls` | `false` | Enable TLS encryption |
+| `--tls-cert` | | TLS certificate file (required with --tls) |
+| `--tls-key` | | TLS private key file (required with --tls) |
+| `--version` | | Print version and exit |
+
+### How the listener works
+
+```
+┌──────────────┐  RELP/TCP  ┌─────────────────┐  stdout  ┌──────────┐
+│ RELP client  │───────────►│ relp-listener   │────────►│ syslog-ng │
+│ (rsyslog,    │◄───────────│                 │         │ program() │
+│  etc.)       │   RELP ACK └─────────────────┘         └──────────┘
+└──────────────┘
+```
+
+1. The listener binds to a TCP port and accepts RELP connections
+2. For each connection, it performs the RELP handshake (`open` command)
+3. Each `syslog` command is acked (`rsp 200 OK`) and the message is written to stdout
+4. syslog-ng reads lines from the program's stdout
+5. On `close` command, the connection is cleanly terminated
+6. Multiple concurrent RELP clients are supported
+
+## Docker: custom syslog-ng image
+
+Add both tools to your syslog-ng Docker image:
+
+```dockerfile
+FROM golang:1.24-alpine AS relp-builder
+WORKDIR /build
+COPY --from=ghcr.io/cybericius/syslog-ng-relp:latest /relp-forwarder /relp-forwarder
+COPY --from=ghcr.io/cybericius/syslog-ng-relp:latest /relp-listener /relp-listener
+
+FROM balabit/syslog-ng:4.10.2
+COPY --from=relp-builder /relp-forwarder /usr/local/bin/relp-forwarder
+COPY --from=relp-builder /relp-listener /usr/local/bin/relp-listener
+```
 
 ## Why not `network(transport("relp"))`?
 
-syslog-ng's built-in RELP transport requires compiling with librelp support. Many distribution packages and the official Docker image (`balabit/syslog-ng`) don't include it. The `program()` approach works with any syslog-ng installation — just drop the binary in and configure.
+syslog-ng's built-in RELP transport requires compiling with librelp support. Many distribution packages and the official Docker image (`balabit/syslog-ng`) don't include it. The `program()` approach works with any syslog-ng installation — just drop the binaries in and configure.
 
 ## Requirements
 
 - Go 1.24+ (build only)
-- A RELP-capable receiver (rsyslog `imrelp`, or any RFC RELP server)
+- A RELP-capable peer (rsyslog `imrelp`/`omrelp`, or any RELP v1 implementation)
 
 ## License
 
