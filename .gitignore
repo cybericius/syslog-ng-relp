@@ -1,5 +1,7 @@
-relp-forwarder
-relp-forwarder-*
+/relp-forwarder
+/relp-forwarder-*
+/relp-listener
+/relp-listener-*
 coverage.out
 *.exe
 .idea/
