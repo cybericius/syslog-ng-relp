@@ -18,6 +18,8 @@ RUN CGO_ENABLED=0 go build \
 # Runtime stage
 FROM scratch
 
+LABEL org.opencontainers.image.source=https://github.com/cybericius/syslog-ng-relp
+
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /build/relp-forwarder /relp-forwarder
 COPY --from=builder /build/relp-listener /relp-listener
