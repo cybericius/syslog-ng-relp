@@ -170,9 +170,27 @@ COPY --from=relp-builder /relp-forwarder /usr/local/bin/relp-forwarder
 COPY --from=relp-builder /relp-listener /usr/local/bin/relp-listener
 ```
 
-## Why not `network(transport("relp"))`?
+## Comparison with syslog-ng built-in RELP
 
-syslog-ng's built-in RELP transport requires compiling with librelp support. Many distribution packages and the official Docker image (`balabit/syslog-ng`) don't include it. The `program()` approach works with any syslog-ng installation — just drop the binaries in and configure.
+syslog-ng has a built-in `network(transport("relp"))` driver. Here's how it compares:
+
+| | **Built-in `transport("relp")`** | **syslog-ng-relp (this project)** |
+|---|---|---|
+| **Dependency** | Requires librelp (C library) linked at compile time | Pure Go, zero external dependencies |
+| **Availability** | Missing from most distro packages and the official Docker image (`balabit/syslog-ng`) | Drop-in binary — works with any syslog-ng |
+| **Installation** | Recompile syslog-ng with `--enable-relp` or find a package that includes it | Copy binary to `/usr/local/bin/`, add `program()` config |
+| **TLS** | Via librelp + GnuTLS | Native Go TLS (no GnuTLS dependency) |
+| **Protocol** | RELP v1 via librelp | RELP v1, pure Go implementation |
+| **Direction** | Source and destination drivers | Both: `relp-listener` (source) and `relp-forwarder` (destination) |
+| **Reconnection** | Built-in with `time-reopen()` | Automatic with configurable delay (default 2s) |
+| **Concurrency** | Single-threaded per driver instance | Listener handles multiple concurrent RELP clients |
+| **Integration** | Native `source{}` / `destination{}` blocks | Via `program()` driver (stdin/stdout) |
+| **Buffering** | syslog-ng disk/memory buffer | syslog-ng `program()` buffer + 1MB line buffer |
+| **Container size** | Adds ~2MB (librelp + GnuTLS) to syslog-ng image — if you can build it | ~6MB static binary, works with stock images |
+
+**When to use the built-in driver:** If your syslog-ng package already includes librelp support, the native driver avoids the `program()` indirection and integrates directly with syslog-ng's internal buffering.
+
+**When to use this project:** If you're running the official Docker image, a distro package without RELP, or want to avoid recompiling syslog-ng. Drop the binaries in and you're done — no build toolchain, no library dependencies.
 
 ## Requirements
 
