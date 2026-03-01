@@ -93,11 +93,11 @@ destination d_relp_tls {
 ### How the forwarder works
 
 ```
-┌──────────┐  stdin   ┌─────────────────┐  RELP/TCP  ┌──────────────┐
+┌───────────┐  stdin  ┌─────────────────┐  RELP/TCP  ┌──────────────┐
 │ syslog-ng │────────►│ relp-forwarder  │───────────►│ RELP server  │
 │ program() │         │                 │◄───────────│ (rsyslog,    │
-└──────────┘         └─────────────────┘   RELP ACK  │  etc.)       │
-                                                      └──────────────┘
+└───────────┘         └─────────────────┘   RELP ACK │  etc.)       │
+                                                     └──────────────┘
 ```
 
 ## relp-listener (source)
@@ -144,7 +144,7 @@ source s_relp_tls {
 ┌──────────────┐  RELP/TCP  ┌─────────────────┐  stdout  ┌──────────┐
 │ RELP client  │───────────►│ relp-listener   │────────►│ syslog-ng │
 │ (rsyslog,    │◄───────────│                 │         │ program() │
-│  etc.)       │   RELP ACK └─────────────────┘         └──────────┘
+│  etc.)       │   RELP ACK └─────────────────┘         └───────────┘
 └──────────────┘
 ```
 
