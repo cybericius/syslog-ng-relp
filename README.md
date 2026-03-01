@@ -183,4 +183,4 @@ This project fills that gap: drop the binaries into any syslog-ng installation a
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Source-Available — see [LICENSE](LICENSE).
