@@ -141,7 +141,7 @@ source s_relp_tls {
 ### How the listener works
 
 ```
-┌──────────────┐  RELP/TCP  ┌─────────────────┐  stdout  ┌──────────┐
+┌──────────────┐  RELP/TCP  ┌─────────────────┐  stdout ┌───────────┐
 │ RELP client  │───────────►│ relp-listener   │────────►│ syslog-ng │
 │ (rsyslog,    │◄───────────│                 │         │ program() │
 │  etc.)       │   RELP ACK └─────────────────┘         └───────────┘
